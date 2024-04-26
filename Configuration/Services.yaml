@@ -11,3 +11,5 @@ services:
     tags:
       - name: 'console.command'
         command: 'configuration:set'
+        description: 'Sets or unsets global system settings.'
+        schedulable: false

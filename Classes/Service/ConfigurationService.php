@@ -1,0 +1,229 @@
+<?php
+declare(strict_types=1);
+namespace T3\CliConfig\Service;
+
+/*
+ * This file has been copied from the great "helhum/typo3-console" package
+ * and slightly modified.
+ * ------------------------------------------------------------------------
+ *
+ * This file is part of the TYPO3 Console project.
+ *
+ * It is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, either version 2
+ * of the License, or any later version.
+ *
+ * For the full copyright and license information, please read
+ * LICENSE file that was distributed with this source code.
+ *
+ */
+
+use TYPO3\CMS\Core\Configuration\ConfigurationManager;
+use TYPO3\CMS\Core\SingletonInterface;
+use TYPO3\CMS\Core\Utility\ArrayUtility;
+use TYPO3\CMS\Core\Utility\GeneralUtility;
+
+class ConfigurationService implements SingletonInterface
+{
+    private const EXCEPTION_CODE_ARRAY_KEY_NOT_FOUND = 1341397869;
+
+    /**
+     * @var ConfigurationManager
+     */
+    private ConfigurationManager $configurationManager;
+
+    /**
+     * @var array<string, mixed>
+     */
+    private array $activeConfiguration;
+
+    /**
+     * @param array<string, mixed> $activeConfiguration
+     */
+    public function __construct(?ConfigurationManager $configurationManager = null, array $activeConfiguration = [])
+    {
+        $this->configurationManager = $configurationManager ?: GeneralUtility::makeInstance(ConfigurationManager::class);
+        $this->activeConfiguration = $activeConfiguration ?: $GLOBALS['TYPO3_CONF_VARS'];
+    }
+
+    public function hasDefault(string $path): bool
+    {
+        return $this->has($path, $this->configurationManager->getDefaultConfiguration());
+    }
+
+    public function hasLocal(string $path): bool
+    {
+        return $this->has($path, $this->getMergedConfiguration());
+    }
+
+    public function hasActive(string $path): bool
+    {
+        return $this->has($path, $this->activeConfiguration);
+    }
+
+    public function getDefault(string $path): mixed
+    {
+        return $this->get($path, $this->configurationManager->getDefaultConfiguration());
+    }
+
+    public function getLocal(string $path): mixed
+    {
+        return $this->get($path, $this->getMergedConfiguration());
+    }
+
+    public function getActive(string $path): mixed
+    {
+        return $this->get($path, $this->activeConfiguration);
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    private function has(string $path, array $config): bool
+    {
+        try {
+            ArrayUtility::getValueByPath($config, $path);
+        } catch (\RuntimeException $e) {
+            if ($e->getCode() !== self::EXCEPTION_CODE_ARRAY_KEY_NOT_FOUND) {
+                throw $e;
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    private function get(string $path, array $config): mixed
+    {
+        try {
+            $value = ArrayUtility::getValueByPath($config, $path);
+        } catch (\RuntimeException $e) {
+            if ($e->getCode() !== self::EXCEPTION_CODE_ARRAY_KEY_NOT_FOUND) {
+                throw $e;
+            }
+            throw new \UnexpectedValueException('No value found for this key!', 1461607530);
+        }
+
+        return $value;
+    }
+
+    public function removeLocal(string $path): bool
+    {
+        return $this->configurationManager->removeLocalConfigurationKeysByPath([$path]);
+    }
+
+    /**
+     * Sets a value in system configuration file
+     *
+     * But only if types are compatible and local config is active
+     */
+    public function setLocal(string $path, mixed $value, string $targetType = ''): bool
+    {
+        try {
+            $value = $this->convertToTargetType($path, $value, $targetType);
+
+            return $this->configurationManager->setLocalConfigurationValueByPath($path, $value);
+        } catch (\InvalidArgumentException $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Returns true if the value is stored in the system configuration file and
+     * is NOT overridden later (e.g. in AdditionalConfiguration.php)
+     */
+    public function localIsActive(string $path): bool
+    {
+        if ($this->hasLocal($path)) {
+            // Weak comparison to ignore differences in ordering of keys
+            return $this->hasActive($path) && $this->getLocal($path) == $this->getActive($path);
+        }
+
+        return !$this->hasActive($path);
+    }
+
+    /**
+     * Convert a value to the type belonging to the given path
+     */
+    private function convertToTargetType(string $path, mixed $value, string $targetType = ''): mixed
+    {
+        $targetType = $targetType ?: $this->getType($path);
+        $actualType = gettype($value);
+        if ($actualType !== $targetType && $targetType !== 'NULL') {
+            if ($this->isTypeConvertible($targetType, $actualType)) {
+                switch ($targetType) {
+                    case 'integer':
+                        $value = (int)$value;
+                        break;
+                    case 'float':
+                    case 'double':
+                        $value = (float)$value;
+                        break;
+                    case 'boolean':
+                        $value = (bool)$value;
+                        break;
+                    case 'string':
+                        $value = (string)$value;
+                        break;
+                    default:
+                        // We don't know any type conversion, so we better exit
+                        throw new \InvalidArgumentException(sprintf('Unknown target type "%s"', $targetType), 1477778705);
+                }
+            } else {
+                // We cannot convert from or to non scalar types, so we better exit
+                throw new \InvalidArgumentException(sprintf('Cannot convert type from "%s" to "%s"', $actualType, $targetType), 1477778754);
+            }
+        }
+
+        return $value;
+    }
+
+    /**
+     * Returns the type of value in given config path
+     */
+    private function getType(string $path): string
+    {
+        $value = null;
+        if ($this->hasActive($path)) {
+            $value = $this->getActive($path);
+        }
+        if ($this->hasLocal($path)) {
+            $value = $this->getLocal($path);
+        }
+        if ($this->hasDefault($path)) {
+            $value = $this->getDefault($path);
+        }
+
+        return gettype($value);
+    }
+
+    /**
+     * Checks if target and actual type is scalar
+     */
+    private function isTypeConvertible(string $targetType, string $actualType): bool
+    {
+        if (in_array($targetType, ['array', 'object', 'resource'], true)) {
+            return false;
+        }
+        if (in_array($actualType, ['array', 'object', 'resource'], true)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function getMergedConfiguration(): array
+    {
+        $mergedConfig = $this->configurationManager->getDefaultConfiguration();
+        ArrayUtility::mergeRecursiveWithOverrule($mergedConfig, $this->configurationManager->getLocalConfiguration());
+
+        return $mergedConfig;
+    }
+}
