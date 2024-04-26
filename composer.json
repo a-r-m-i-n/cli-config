@@ -1,0 +1,40 @@
+{
+    "name": "t3/cli-config",
+    "description": "TYPO3 CMS extension to provide a command to set global system settings on CLI.",
+    "type": "typo3-cms-extension",
+    "license": "GPL-2.0-or-later",
+    "homepage": "https://github.com/a-r-m-i-n/cli-config",
+    "support": {
+        "issues": "https://github.com/a-r-m-i-n/cli-config/issues",
+        "source": "https://github.com/a-r-m-i-n/cli-config"
+    },
+    "authors": [
+        {
+            "name": "Armin Vieweg",
+            "email": "armin@v.ieweg.de",
+            "homepage": "https://v.ieweg.de"
+        }
+    ],
+    "keywords": [
+        "typo3",
+        "cli",
+        "configuration"
+    ],
+    "require": {
+        "php": "^8.2",
+        "typo3/cms-core": "^13.0"
+    },
+    "conflict": {
+        "helhum/typo3-console": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "T3\\CliConfig\\": "Classes"
+        }
+    },
+    "extra": {
+        "typo3/cms": {
+            "extension-key": "cli_config"
+        }
+    }
+}
