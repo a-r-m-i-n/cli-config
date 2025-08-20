@@ -12,7 +12,7 @@ use T3\CliConfig\Service\ConfigurationService;
 
 class ConfigurationCommand extends Command
 {
-    public function __construct(private readonly ConfigurationService $configurationService, string $name = null)
+    public function __construct(private readonly ConfigurationService $configurationService, ?string $name = null)
     {
         parent::__construct($name);
     }
